@@ -1,21 +1,133 @@
 # OpenDataLake
 
-OpenDataLake is a modular data engineering platform built to demonstrate modern data engineering concepts using public datasets.
+> **A modular data engineering platform for ingesting, transforming, and analyzing data from multiple sources through reusable ETL pipelines.**
 
-The project is designed to simulate how enterprise data platforms ingest, validate, transform, store, and analyze data from multiple sources while keeping the architecture clean, scalable, and easy to extend.
+OpenDataLake is an extensible ETL platform designed around enterprise software architecture principles. The platform provides a common framework for collecting data from APIs, files, databases, and other sources, transforming raw datasets into normalized records, and loading them into downstream systems for analytics and visualization.
 
-The long-term goal is to support multiple independent data pipelines (Stocks, Weather, Crime, Census, Real Estate, Economics, and more) through a common framework that emphasizes reusable components, testing, observability, and maintainability.
+New data sources are added as independent recipes, allowing the platform to grow without changing its core architecture.
 
-## Goals
+---
 
-- Learn data engineering from first principles
-- Build production-style ETL pipelines
-- Understand software architecture and clean code
-- Practice SQL and PostgreSQL
-- Work with APIs and data validation
-- Build interactive analytics dashboards
-- Containerize applications with Docker
-- Automate testing using GitHub Actions
-- Design a modular framework that can grow over time
+## Features
 
-This repository is a learning project focused on understanding how modern enterprise data platforms are designed.
+- Modular ETL framework
+- Recipe-based architecture
+- Runner orchestration
+- Dependency Injection
+- Configuration management
+- Reusable service layer
+- Shared recipe contract
+- HTTP client abstraction
+- Data normalization
+- Command-line execution
+- Extensible platform architecture
+
+---
+
+## Supported Data Sources
+
+| Data Source | Status |
+|--------------|--------|
+| Events | ✅ |
+| Weather | 🚧 Planned |
+| Crime | 🚧 Planned |
+| Census | 🚧 Planned |
+| Real Estate | 🚧 Planned |
+| Flights | 🚧 Planned |
+| Hotels | 🚧 Planned |
+| Economic Data | 🚧 Planned |
+
+---
+
+## Architecture
+
+```text
+                 Bootstrap
+                     │
+          Dependency Injection
+                     │
+                     ▼
+            Recipe Registry
+                     │
+                     ▼
+           Runner (Orchestrator)
+                     │
+      ┌──────────────┼──────────────┐
+      ▼              ▼              ▼
+  EventsRecipe   WeatherRecipe   CrimeRecipe
+      │              │              │
+      ▼              ▼              ▼
+    Services       Services       Services
+      │              │              │
+      ▼              ▼              ▼
+ External APIs   External APIs  External APIs
+                     │
+                     ▼
+              Normalized Data
+                     │
+                     ▼
+          Database / Analytics / Dashboards
+```
+
+---
+
+## Vision
+
+OpenDataLake is designed to become a unified data platform that aggregates information from multiple domains into a centralized analytics ecosystem.
+
+Its modular architecture enables new data sources to be integrated by implementing new recipes rather than modifying the existing framework, making the platform scalable, maintainable, and easy to extend.
+
+---
+
+## Roadmap
+
+### Foundation
+- [x] Modular project structure
+- [x] Virtual environment
+- [x] BaseRecipe contract
+- [x] Runner (ETL orchestrator)
+- [x] Recipe Registry
+- [x] Bootstrap initialization
+- [x] Dependency Injection
+- [x] Configuration (Settings)
+- [x] Shared HTTP client
+- [x] Command-line interface (`--recipe`)
+- [x] Multi-recipe architecture
+
+### Data Sources
+- [x] Ticketmaster Events API
+- [x] Multi-city event extraction
+- [x] Data normalization
+- [ ] Weather API
+- [ ] Crime Data API
+- [ ] Census API
+- [ ] Real Estate Data
+- [ ] Flight Data
+- [ ] Hotel Data
+- [ ] Economic Indicators
+
+### Data Platform
+- [ ] Structured logging
+- [ ] Error handling & retry policies
+- [ ] PostgreSQL integration
+- [ ] Database models
+- [ ] Data validation
+- [ ] Data deduplication
+- [ ] Scheduling
+- [ ] Metrics & monitoring
+
+### DevOps
+- [ ] Docker
+- [ ] Docker Compose
+- [ ] GitHub Actions CI
+- [ ] Automated testing
+- [ ] Code coverage
+- [ ] Production configuration
+
+### Analytics
+- [ ] SQL analytics
+- [ ] Event activity analysis
+- [ ] Seasonal trend analysis
+- [ ] Interactive dashboards
+- [ ] Geographic visualizations
+- [ ] Historical reporting

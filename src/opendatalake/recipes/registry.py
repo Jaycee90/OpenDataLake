@@ -12,6 +12,13 @@ class RecipeRegistry:
         self.recipes[recipe.name] = recipe
 
     def get_recipe(self, name: str) -> BaseRecipe:
+        if name not in self.recipes:
+            available = ", ".join(self.recipes.keys())
+            raise ValueError(
+                f"Recipe '{name}' was not found.\n"
+                f"Available recipes: {available}"
+            )
+
         return self.recipes[name]
 
     def get_all(self) -> list[BaseRecipe]:

@@ -1,7 +1,9 @@
 import argparse
 
-from opendatalake.recipes.events import AustinEventsRecipe
-# from opendatalake.recipes.stocks import StockRecipe
+from opendatalake.config.settings import Settings
+from opendatalake.services.http_client import HttpClient
+from opendatalake.services.ticketmaster_service import TicketmasterService
+from opendatalake.recipes.events import EventsRecipe
 from opendatalake.recipes.registry import RecipeRegistry
 from opendatalake.runner import Runner
 
@@ -32,9 +34,13 @@ def parse_arguments() -> argparse.Namespace:
 def main() -> None:
     arguments = parse_arguments()
 
+    settings = Settings.load()  # Load settings from environment variables
+    http_client = HttpClient()
+    ticketmaster_service = TicketmasterService(http_client=http_client, settings=settings)
+    events_recipe = EventsRecipe(ticketmaster_service)
+
     registry = RecipeRegistry()
-    registry.register(AustinEventsRecipe()) # Registers recipe
-    #registry.register(StockRecipe())
+    registry.register(events_recipe) # Registers recipe
 
     runner = Runner(registry) # injects the registry dependency into the Runner
 

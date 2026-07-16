@@ -1,0 +1,21 @@
+# this file owns configuration and it is the source of truth for all configuration values in the application
+
+# dataclasses generates constructors automatically and makes it easy to create immutable objects
+from dataclasses import dataclass
+import os
+from dotenv import load_dotenv
+
+@dataclass(frozen=True) # once created, the object cannot be modified
+class Settings:
+    ticketmaster_api_key: str
+
+    @classmethod
+    def load(cls) -> "Settings":
+        load_dotenv() 
+        
+        api_key = os.getenv("TICKETMASTER_API_KEY")
+
+        if not api_key:
+            raise ValueError("TICKETMASTER_API_KEY is not set in the environment variables.")
+
+        return cls(ticketmaster_api_key=api_key)

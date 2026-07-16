@@ -1,48 +1,79 @@
 from typing import Any
 
 from opendatalake.recipes.base import BaseRecipe
+from opendatalake.services.ticketmaster_service import TicketmasterService
 
 
-class AustinEventsRecipe(BaseRecipe):
-    name = "austin_events"
+class EventsRecipe(BaseRecipe):
+    name = "US_events"
 
-    def extract(self) -> Any:
-        print("Extracting Austin events...")
-        return [
-            {
-                "event_name": "Austin City Limits Live",
-                "venue": "Moody Theater",
-                "date": "2026-07-12",
-                "category": "Music",
-            },
-            {
-                "event_name": "Austin FC Match",
-                "venue": "Q2 Stadium",
-                "date": "2026-07-13",
-                "category": "Sports",
-            },
-        ]
+    CITIES = [
+        "Austin",
+        "New York",
+        "Los Angeles",
+        "Chicago",
+        "Las Vegas",
+        "Miami",
+        "Nashville",
+        "Seattle",
+    ]
 
-    def transform(self, raw_data: Any) -> Any:
+    def __init__(self, ticketmaster_service: TicketmasterService) -> None:
+        self.ticketmaster_service = ticketmaster_service
+
+    def extract(self) -> list[dict]:
+        print("Extracting events for major US cities...")
+        all_events = []
+
+        for city in self.CITIES:
+            events = self.ticketmaster_service.get_events(city=city, size=20)
+            for event in events:
+                event["requested_city"] = city  # Add the city to each event
+            all_events.extend(events)
+            print(f"Received {len(events)} events for {city}.")
+        print(f"Total events extracted: {len(all_events)}")
+
+        return all_events
+
+    def transform(self, raw_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
         print("Transforming Austin events...")
 
-        transformed = []
+        transformed_events: list[dict[str, Any]] = []
 
-        for item in raw_data:
-            transformed.append(
-                {
-                    "name": item["event_name"],
-                    "venue": item["venue"],
-                    "event_date": item["date"],
-                    "category": item["category"],
-                    "city": "Austin",
-                    "source": "mock_data",
-                }
-            )
+        for event in raw_data:
+            venues = event.get("_embedded", {}).get("venues", [])
+            venue = venues[0] if venues else {}
 
-        return transformed
+            classifications = event.get("classifications", [])
+            classification = classifications[0] if classifications else {}
 
-    def load(self, transformed_data: Any) -> None:
+            start = event.get("dates", {}).get("start", {})
+            status = event.get("dates", {}).get("status", {})
+
+            transformed_event = {
+                "event_id": event.get("id"),
+                "name": event.get("name"),
+                "event_url": event.get("url"),
+                "event_date": start.get("localDate"),
+                "event_time": start.get("localTime"),
+                "status": status.get("code"),
+                "category": classification.get("segment", {}).get("name"),
+                "genre": classification.get("genre", {}).get("name"),
+                "subgenre": classification.get("subGenre", {}).get("name"),
+                "venue": venue.get("name"),
+                "city": venue.get("city", {}).get("name"),
+                "state": venue.get("state", {}).get("stateCode"),
+                "address": venue.get("address", {}).get("line1"),
+                "latitude": venue.get("location", {}).get("latitude"),
+                "longitude": venue.get("location", {}).get("longitude"),
+                "source": "ticketmaster",
+            }
+
+            transformed_events.append(transformed_event)
+
+        return transformed_events
+
+    def load(self, transformed_data: list[dict[str, Any]]) -> None:
         print("Loading Austin events...")
 
         for item in transformed_data:

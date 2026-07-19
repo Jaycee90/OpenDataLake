@@ -1,8 +1,11 @@
+import logging
 from typing import Any
 
 from opendatalake.recipes.base import BaseRecipe
 from opendatalake.services.ticketmaster_service import TicketmasterService
+from opendatalake.exceptions.ticketmaster_error import TicketmasterError
 
+logger = logging.getLogger(__name__)
 
 class EventsRecipe(BaseRecipe):
     name = "US_events"
@@ -21,22 +24,29 @@ class EventsRecipe(BaseRecipe):
     def __init__(self, ticketmaster_service: TicketmasterService) -> None:
         self.ticketmaster_service = ticketmaster_service
 
-    def extract(self) -> list[dict]:
-        print("Extracting events for major US cities...")
-        all_events = []
+    def extract(self) -> list[dict[str, Any]]:
+        logger.info("Extracting events for major US cities...")
+
+        all_events: list[dict[str, Any]] = []
 
         for city in self.CITIES:
-            events = self.ticketmaster_service.get_events(city=city, size=20)
+            try:
+                events = self.ticketmaster_service.get_events(city=city, size=20)
+            except TicketmasterError:
+                logger.error("Skipping %s due to Ticketmaster API error.", city)
+                continue
+
             for event in events:
                 event["requested_city"] = city  # Add the city to each event
             all_events.extend(events)
-            print(f"Received {len(events)} events for {city}.")
-        print(f"Total events extracted: {len(all_events)}")
+
+            logger.info("Received %d events for %s.", len(events), city)
+        logger.info("Total events extracted: %d", len(all_events))
 
         return all_events
 
     def transform(self, raw_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        print("Transforming Austin events...")
+        logger.info("Transforming %d events...", len(raw_data))
 
         transformed_events: list[dict[str, Any]] = []
 
@@ -71,10 +81,13 @@ class EventsRecipe(BaseRecipe):
 
             transformed_events.append(transformed_event)
 
+        logger.info("Successfully transformed %d events.", len(transformed_events))
         return transformed_events
 
     def load(self, transformed_data: list[dict[str, Any]]) -> None:
-        print("Loading Austin events...")
+        logger.info("Loading %d US events...", len(transformed_data))
 
         for item in transformed_data:
-            print(item)
+            logger.debug("Transformed event: %s", item)
+
+        logger.info("Loaded %d events", len(transformed_data))

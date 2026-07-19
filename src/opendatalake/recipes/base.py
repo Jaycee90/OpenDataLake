@@ -1,15 +1,18 @@
 from abc import ABC, abstractmethod
+import logging
 
+logger = logging.getLogger(__name__)
 
 class BaseRecipe(ABC):
     name: str = "base"
 
     def run(self) -> None:
-        print(f"Running recipe: {self.name}")
+        logger.info(f"Running recipe: {self.name}")
+
         raw_data = self.extract()
         transformed_data = self.transform(raw_data)
         self.load(transformed_data)
-        print(f"Finished recipe: {self.name}")
+        logger.info(f"Finished recipe: {self.name}")
 
     @abstractmethod
     def extract(self):

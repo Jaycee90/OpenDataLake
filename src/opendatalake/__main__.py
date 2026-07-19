@@ -6,6 +6,7 @@ from opendatalake.services.ticketmaster_service import TicketmasterService
 from opendatalake.recipes.events import EventsRecipe
 from opendatalake.recipes.registry import RecipeRegistry
 from opendatalake.runner import Runner
+from opendatalake.config.logger import configure_logging
 
 '''The bootstrap creates and connects the objects:
 
@@ -32,6 +33,7 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 def main() -> None:
+    configure_logging()  # Configure logging at the start of the application
     arguments = parse_arguments()
 
     settings = Settings.load()  # Load settings from environment variables

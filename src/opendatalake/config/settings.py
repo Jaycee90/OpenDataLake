@@ -13,9 +13,16 @@ class Settings:
     http_max_attempts: int
     http_delay: float
 
+    database_url: str
+
     @classmethod
     def load(cls) -> "Settings":
-        load_dotenv() 
+        load_dotenv()
+
+        database_url = os.getenv("DATABASE_URL")
+
+        if not database_url:
+            raise ValueError("DATABASE_URL is required.")
         
         api_key = os.getenv("TICKETMASTER_API_KEY")
         http_timeout=float(os.getenv("HTTP_TIMEOUT", 10.0)),
@@ -29,5 +36,6 @@ class Settings:
             ticketmaster_api_key=api_key,
             http_timeout=http_timeout,
             http_max_attempts=http_max_attempts,
-            http_delay=http_delay
+            http_delay=http_delay,
+            database_url=database_url
         )

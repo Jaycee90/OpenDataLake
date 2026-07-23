@@ -1,6 +1,6 @@
 # OpenDataLake
 
-> **A modular data engineering platform for ingesting, transforming, and analyzing data from multiple sources through reusable ETL pipelines.**
+> **OpenDataLake is an enterprise-style data engineering platform that demonstrates how modern data pipelines are built—from API ingestion and transformation to transactional persistence, data warehouse modeling, and business intelligence.**
 
 OpenDataLake is an extensible ETL platform designed around enterprise software architecture principles. The platform provides a common framework for collecting data from APIs, files, databases, and other sources, transforming raw datasets into normalized records, and loading them into downstream systems for analytics and visualization.
 
@@ -10,17 +10,21 @@ New data sources are added as independent recipes, allowing the platform to grow
 
 ## Features
 
-- Modular ETL framework
-- Recipe-based architecture
-- Runner orchestration
-- Dependency Injection
-- Configuration management
-- Reusable service layer
-- Shared recipe contract
-- HTTP client abstraction
-- Data normalization
-- Command-line execution
-- Extensible platform architecture
+• Modular ETL framework
+• Recipe-based architecture
+• Runner orchestration
+• Dependency Injection
+• Configuration management
+• Reusable service layer
+• Repository Pattern
+• SQLAlchemy ORM
+• PostgreSQL persistence
+• Transaction management
+• PostgreSQL upserts
+• HTTP client abstraction
+• Data normalization
+• Command-line execution
+• Extensible platform architecture
 
 ---
 
@@ -42,31 +46,41 @@ New data sources are added as independent recipes, allowing the platform to grow
 ## Architecture
 
 ```text
-                 Bootstrap
-                     │
-          Dependency Injection
-                     │
-                     ▼
-            Recipe Registry
-                     │
-                     ▼
-           Runner (Orchestrator)
-                     │
-      ┌──────────────┼──────────────┐
-      ▼              ▼              ▼
-  EventsRecipe   WeatherRecipe   CrimeRecipe
-      │              │              │
-      ▼              ▼              ▼
-    Services       Services       Services
-      │              │              │
-      ▼              ▼              ▼
- External APIs   External APIs  External APIs
-                     │
-                     ▼
-              Normalized Data
-                     │
-                     ▼
-          Database / Analytics / Dashboards
+                     Bootstrap
+                          │
+               Dependency Injection
+                          │
+                          ▼
+                  Recipe Registry
+                          │
+                          ▼
+                 Runner (Orchestrator)
+                          │
+      ┌───────────────────┼───────────────────┐
+      ▼                   ▼                   ▼
+ EventsRecipe        WeatherRecipe       CrimeRecipe
+      │                   │                   │
+      ▼                   ▼                   ▼
+ TicketmasterService  WeatherService     CrimeService
+      │                   │                   │
+      ▼                   ▼                   ▼
+ Ticketmaster API     Weather API        Crime API
+      │                   │                   │
+      ▼                   ▼                   ▼
+   Transform          Transform          Transform
+      │                   │                   │
+      ▼                   ▼                   ▼
+ EventRepository   WeatherRepository  CrimeRepository
+      └───────────────────┼───────────────────┘
+                          ▼
+                     PostgreSQL
+                          │
+                          ▼
+              Analytics SQL Layer
+                          │
+                          ▼
+             Apache Superset / Tableau
+           
 ```
 
 ---
@@ -107,14 +121,18 @@ Its modular architecture enables new data sources to be integrated by implementi
 - [ ] Economic Indicators
 
 ### Data Platform
-- [ ] Structured logging
-- [ ] Error handling & retry policies
-- [ ] PostgreSQL integration
-- [ ] Database models
-- [ ] Data validation
-- [ ] Data deduplication
-- [ ] Scheduling
-- [ ] Metrics & monitoring
+
+- [x] PostgreSQL integration
+- [x] SQLAlchemy ORM
+- [x] Database models
+- [x] Repository Pattern
+- [x] Transaction management
+- [x] PostgreSQL upserts
+- [x] Data deduplication
+- [ ] SQL views
+- [ ] Data warehouse schemas
+- [ ] Materialized views
+- [ ] Query optimization
 
 ### DevOps
 - [ ] Docker
@@ -124,10 +142,27 @@ Its modular architecture enables new data sources to be integrated by implementi
 - [ ] Code coverage
 - [ ] Production configuration
 
-### Analytics
+### Data Warehouse & Analytics
 - [ ] SQL analytics
+- [ ] Analytical SQL views
 - [ ] Event activity analysis
 - [ ] Seasonal trend analysis
-- [ ] Interactive dashboards
-- [ ] Geographic visualizations
-- [ ] Historical reporting
+- [ ] Star schema
+- [ ] Data marts
+- [ ] Apache Superset
+- [ ] Tableau
+- [ ] Geographic dashboards
+
+## Technology Stack
+
+| Layer | Technology |
+|--------|------------|
+| Language | Python 3.13 |
+| Database | PostgreSQL |
+| ORM | SQLAlchemy |
+| Driver | Psycopg |
+| Configuration | python-dotenv |
+| Architecture | Dependency Injection, Repository Pattern |
+| Data Source | Ticketmaster Discovery API |
+| Future BI | Apache Superset, Tableau |
+| Future Orchestration | Airflow, Kubernetes CronJobs |

@@ -95,6 +95,6 @@ class EventsRecipe(BaseRecipe):
     def load(self, transformed_data: list[Event]) -> None:
         logger.info("Loading %d US events...", len(transformed_data))
 
-        self._event_repository.save_all(transformed_data)
+        self._event_repository.upsert_all(transformed_data)
 
         logger.info("Loaded %d events", len(transformed_data))

@@ -1,6 +1,6 @@
 # OpenDataLake
 
-> **OpenDataLake is an enterprise-style data engineering platform that demonstrates how modern data pipelines are built—from API ingestion and transformation to transactional persistence, data warehouse modeling, and business intelligence.**
+> **OpenDataLake is an enterprise-style data engineering platform that demonstrates how modern data pipelines are built from API ingestion and transformation to transactional persistence, data warehouse modeling, and business intelligence.**
 
 OpenDataLake is an extensible ETL platform designed around enterprise software architecture principles. The platform provides a common framework for collecting data from APIs, files, databases, and other sources, transforming raw datasets into normalized records, and loading them into downstream systems for analytics and visualization.
 
@@ -10,21 +10,21 @@ New data sources are added as independent recipes, allowing the platform to grow
 
 ## Features
 
-• Modular ETL framework
-• Recipe-based architecture
-• Runner orchestration
-• Dependency Injection
-• Configuration management
-• Reusable service layer
-• Repository Pattern
-• SQLAlchemy ORM
-• PostgreSQL persistence
-• Transaction management
-• PostgreSQL upserts
-• HTTP client abstraction
-• Data normalization
-• Command-line execution
-• Extensible platform architecture
+- Modular ETL framework
+- Recipe-based architecture
+- Runner orchestration
+- Dependency Injection
+- Configuration management
+- Reusable service layer
+- Repository Pattern
+- SQLAlchemy ORM
+- PostgreSQL persistence
+- Transaction management
+- PostgreSQL upserts
+- HTTP client abstraction
+- Data normalization
+- Command-line execution
+- Extensible platform architecture
 
 ---
 

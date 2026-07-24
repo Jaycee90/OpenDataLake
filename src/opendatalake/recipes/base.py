@@ -11,6 +11,7 @@ class BaseRecipe(ABC):
 
         raw_data = self.extract()
         transformed_data = self.transform(raw_data)
+        self.validate(transformed_data)
         self.load(transformed_data)
         logger.info(f"Finished recipe: {self.name}")
 
@@ -20,6 +21,10 @@ class BaseRecipe(ABC):
 
     @abstractmethod
     def transform(self, raw_data):
+        pass
+
+    @abstractmethod
+    def validate(self, transformed_data) -> None:
         pass
 
     @abstractmethod

@@ -1,0 +1,4 @@
+CREATE SCHEMA IF NOT EXISTS analytics;
+
+PARTITION BY city
+ORDER BY event_count DESC

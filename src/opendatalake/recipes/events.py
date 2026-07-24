@@ -7,6 +7,7 @@ from opendatalake.database.models.event import Event
 from opendatalake.repositories.event_repo import EventRepository
 from opendatalake.services.ticketmaster_service import TicketmasterService
 from opendatalake.exceptions.ticketmaster_error import TicketmasterError
+from opendatalake.repositories.analytics_repo import AnalyticsRepository
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +25,10 @@ class EventsRecipe(BaseRecipe):
         "Seattle",
     ]
 
-    def __init__(self, ticketmaster_service: TicketmasterService, event_repository: EventRepository) -> None:
+    def __init__(self, ticketmaster_service: TicketmasterService, event_repository: EventRepository, analytics_repository: AnalyticsRepository) -> None:
         self._ticketmaster_service = ticketmaster_service
         self._event_repository = event_repository
+        self._analytics_repository = analytics_repository
 
     def extract(self) -> list[dict[str, Any]]:
         logger.info("Extracting events for major US cities...")
@@ -91,6 +93,38 @@ class EventsRecipe(BaseRecipe):
 
         logger.info("Successfully transformed %d events.", len(transformed_events))
         return transformed_events
+    
+    def validate(self, events: list[Event]) -> None:
+        if not events:
+            raise ValueError("No events were returned")
+
+        seen_event_ids: set[str] = set()
+
+        for event in events:
+            if not event.event_id:
+                raise ValueError("Event ID cannot be empty")
+
+            if not event.name:
+                raise ValueError(
+                    f"Event {event.event_id} has no name"
+                )
+
+            if not event.city:
+                raise ValueError(
+                    f"Event {event.event_id} has no city"
+                )
+
+            if not event.event_date:
+                raise ValueError(
+                    f"Event {event.event_id} has no date"
+                )
+
+            if event.event_id in seen_event_ids:
+                raise ValueError(
+                    f"Duplicate event ID: {event.event_id}"
+                )
+
+            seen_event_ids.add(event.event_id)
 
     def load(self, transformed_data: list[Event]) -> None:
         logger.info("Loading %d US events...", len(transformed_data))
@@ -98,3 +132,7 @@ class EventsRecipe(BaseRecipe):
         self._event_repository.upsert_all(transformed_data)
 
         logger.info("Loaded %d events", len(transformed_data))
+
+        self._analytics_repository.refresh_all()
+
+        logger.info("Refreshed all analytics materialized views.")

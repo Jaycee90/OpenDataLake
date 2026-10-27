@@ -15,7 +15,7 @@ class TicketmasterService:
         self.http_client = http_client
         self.settings = settings
 
-    def get_events(self, city: str, size: int = 20) -> list[dict[str, Any]]:
+    def get_events(self, city: str, size: int = 50, page: int = 0) -> list[dict[str, Any]]:
         logger.info(f"Calling Ticketmaster API for {city}")
 
         try:
@@ -24,7 +24,9 @@ class TicketmasterService:
                 params={
                     "apikey": self.settings.ticketmaster_api_key,
                     "city": city,
+                    "countryCode": "US",
                     "size": size,
+                    "page": page,
                     "sort": "date,asc",
                 },
             )

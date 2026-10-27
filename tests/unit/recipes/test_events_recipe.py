@@ -3,7 +3,7 @@ import pytest
 from datetime import date, time
 from tests.conftest import recipe
 from tests.factories.event_factory import create_event
-from unittest.mock import call
+from unittest.mock import call, patch
 from opendatalake.exceptions.ticketmaster_error import TicketmasterError
 
 def test_validate_raises_error_when_events_are_empty(recipe):
@@ -117,20 +117,33 @@ def test_transform_maps_raw_event_to_event_model(recipe):
     assert event.source == "ticketmaster"
 
 # Test whether load() tell the repository to save these events?"
-def test_load_calls_event_repository(recipe):
+@patch("opendatalake.recipes.events.WarehouseRepository")
+def test_load_calls_event_repository(mock_warehouse, recipe):
     events = [create_event()]
 
     recipe.load(events)
 
-    recipe._event_repository.upsert_all.assert_called_once_with(events)
+    session = recipe._session_factory.begin.return_value.__enter__.return_value
+
+    recipe._event_repository.upsert_all.assert_called_once_with(
+        events,
+        session=session,
+    )
+
+    mock_warehouse.assert_called_once_with(session)
 
 # Test whether after loading, did it refresh the materialized views?
-def test_load_refreshes_analytics(recipe):
+@patch("opendatalake.recipes.events.WarehouseRepository")
+def test_load_refreshes_analytics(mock_warehouse, recipe):
     events = [create_event()]
 
     recipe.load(events)
 
-    recipe._analytics_repository.refresh_all.assert_called_once()
+    session = recipe._session_factory.begin.return_value.__enter__.return_value
+
+    recipe._analytics_repository.refresh_all.assert_called_once_with(
+        session=session,
+    )
 
 # Verifies whether every city is requested in order.
 def test_extract_gets_events_for_all_cities(recipe):
@@ -139,7 +152,7 @@ def test_extract_gets_events_for_all_cities(recipe):
     recipe.extract()
 
     expected_calls = [
-        call(city=city, size=20)
+        call(city=city, size=50, page=0)
         for city in recipe.CITIES
     ]
 
@@ -148,51 +161,39 @@ def test_extract_gets_events_for_all_cities(recipe):
 
 # Test that events are combined
 def test_extract_combines_events_from_all_cities(recipe):
-    recipe._ticketmaster_service.get_events.side_effect = [
-        [{"id": "austin-1"}],
-        [{"id": "new-york-1"}],
-        [],
-        [],
-        [],
-        [],
-        [],
-        [{"id": "seattle-1"}],
-    ]
+    responses = {
+        "Austin": [{"id": "austin-1"}],
+        "New York": [{"id": "new-york-1"}],
+        "Seattle": [{"id": "seattle-1"}],
+    }
+
+    def fake_get_events(city, size, page):
+        if page == 0:
+            return responses.get(city, [])
+        return []
+
+    recipe._ticketmaster_service.get_events.side_effect = fake_get_events
 
     result = recipe.extract()
-    # print(result)
-    expected = [{'id': 'austin-1', 'requested_city': 'Austin'}, {'id': 'new-york-1', 'requested_city': 'New York'}, {'id': 'seattle-1', 'requested_city': 'Seattle'}]
 
-    assert result == expected
-    # print(f"Expected: {expected} matches the result: {result}" )
-    
-    # You can test the combination this way too
-    # assert result == [
-    #     {
-    #         "id": "austin-1",
-    #         "requested_city": "Austin",
-    #     },
-    #     {
-    #         "id": "new-york-1",
-    #         "requested_city": "New York",
-    #     },
-    #     {
-    #         "id": "seattle-1",
-    #         "requested_city": "Seattle",
-    #     },
-    # ]
+    assert result == [
+        {"id": "austin-1", "requested_city": "Austin"},
+        {"id": "new-york-1", "requested_city": "New York"},
+        {"id": "seattle-1", "requested_city": "Seattle"},
+    ]
 
 def test_extract_skips_city_when_ticketmaster_error_occurs(recipe):
-    recipe._ticketmaster_service.get_events.side_effect = [
-        TicketmasterError("API failed"),
-        [{"id": "new-york-1"}],
-        [],
-        [],
-        [],
-        [],
-        [],
-        [],
-    ]
+
+    def fake_get_events(city, size, page):
+        if city == "Austin":
+            raise TicketmasterError("API failed")
+
+        if city == "New York" and page == 0:
+            return [{"id": "new-york-1"}]
+
+        return []
+
+    recipe._ticketmaster_service.get_events.side_effect = fake_get_events
 
     result = recipe.extract()
 
@@ -212,5 +213,29 @@ def test_extract_calls_the_api_for_every_city(recipe):
     # print(recipe._ticketmaster_service.get_events.call_count)
     # print(recipe._ticketmaster_service.get_events.call_args_list)
 
-    expected_calls = [call(city=city, size=20) for city in recipe.CITIES]
+    expected_calls = [call(city=city, size=50, page=0) for city in recipe.CITIES]
     assert recipe._ticketmaster_service.get_events.call_args_list == expected_calls
+
+def test_transform_removes_city_whitespace(recipe):
+    raw_data = [
+        {
+            "id": "event-456",
+            "name": "Miami Concert",
+            "dates": {
+                "start": {"localDate": "2026-11-10"}
+            },
+            "_embedded": {
+                "venues": [
+                    {
+                        "city": {"name": " Miami "},
+                        "state": {"stateCode": " FL "}
+                    }
+                ]
+            }
+        }
+    ]
+
+    result = recipe.transform(raw_data)
+
+    assert result[0].city == "Miami"
+    assert result[0].state == "FL"

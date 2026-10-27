@@ -1,7 +1,7 @@
 import argparse
 from sqlalchemy import text
 
-from opendatalake.database.database import create_database_engine, create_database_tables, create_session_factory
+from opendatalake.database.database_session import create_database_engine, create_database_tables, create_session_factory
 from opendatalake.config.settings import Settings
 from opendatalake.repositories.event_repo import EventRepository
 from opendatalake.repositories.analytics_repo import AnalyticsRepository
@@ -55,7 +55,7 @@ def main() -> None:
     ticketmaster_service = TicketmasterService(http_client=http_client, settings=settings)
     event_repository = EventRepository(session_factory=session_factory)
     analytics_repository = AnalyticsRepository(session_factory=session_factory)
-    events_recipe = EventsRecipe(ticketmaster_service=ticketmaster_service, event_repository=event_repository, analytics_repository=analytics_repository)
+    events_recipe = EventsRecipe(ticketmaster_service=ticketmaster_service, event_repository=event_repository, analytics_repository=analytics_repository, session_factory=session_factory)
 
     registry = RecipeRegistry()
     registry.register(events_recipe) # Registers recipe

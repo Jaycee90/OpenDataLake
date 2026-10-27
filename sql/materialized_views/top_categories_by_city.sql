@@ -1,5 +1,17 @@
 CREATE MATERIALIZED VIEW analytics.top_categories_by_city AS
-WITH ranked_events_by_city_and_category AS (
+WITH category_counts AS (
+    SELECT
+        TRIM(v.city)::VARCHAR AS city,
+        c.category,
+        COUNT(*) AS event_count
+    FROM analytics.fact_events AS f
+    JOIN analytics.dim_venue AS v
+        ON f.venue_key = v.venue_key
+    JOIN analytics.dim_category AS c
+        ON f.category_key = c.category_key
+    GROUP BY TRIM(v.city), c.category
+),
+ranked_categories AS (
     SELECT
         city,
         category,
@@ -8,15 +20,12 @@ WITH ranked_events_by_city_and_category AS (
             PARTITION BY city
             ORDER BY event_count DESC, category ASC
         ) AS category_rank
-    FROM analytics.event_counts_by_category_and_city
+    FROM category_counts
 )
 SELECT
     city,
     category,
     event_count,
     category_rank
-FROM ranked_events_by_city_and_category
+FROM ranked_categories
 WHERE category_rank <= 3;
-
-SELECT *
-FROM analytics.top_categories_by_city;

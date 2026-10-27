@@ -16,53 +16,55 @@ class EventRepository:
         # _session_factory tells other developers that this is an internal dependency. Don't access it outside this class."
         self._session_factory = session_factory
 
-    def upsert_all(self, events: list[Event]) -> None:
+    def upsert_all(self, events: list[Event], session: Session | None = None,) -> None:
         if not events:
             return
 
-        rows = [
-            {
-                column.name: getattr(event, column.name)
-                for column in Event.__table__.columns
-                if column.name not in {
+        batch_size = 500
+
+        def execute_batches(db_session: Session) -> None:
+            for start in range(0, len(events), batch_size):
+                batch = events[start:start + batch_size]
+
+                rows = [
+                    {
+                        column.name: getattr(event, column.name)
+                        for column in Event.__table__.columns
+                        if column.name not in {
+                            "id",
+                            "created_at",
+                            "updated_at",
+                        }
+                    }
+                    for event in batch
+                ]
+
+                statement = insert(Event).values(rows)
+
+                excluded_columns = {
                     "id",
+                    "event_id",
                     "created_at",
                     "updated_at",
                 }
-            }
-            for event in events
-        ]
 
-        statement = insert(Event).values(rows)
+                update_columns = {
+                    column.name: getattr(statement.excluded, column.name)
+                    for column in Event.__table__.columns
+                    if column.name not in excluded_columns
+                }
 
-        excluded_columns = {
-            "id",
-            "event_id",
-            "created_at",
-            "updated_at",
-        }
+                update_columns["updated_at"] = func.now()
 
-        update_columns = {
-            column.name: getattr(statement.excluded, column.name)
-            for column in Event.__table__.columns
-            if column.name not in excluded_columns
-        }
+                statement = statement.on_conflict_do_update(
+                    index_elements=[Event.event_id],
+                    set_=update_columns,
+                )
 
-        update_columns["updated_at"] = func.now()
+                db_session.execute(statement)
 
-        statement = statement.on_conflict_do_update(
-            index_elements=[Event.event_id],
-            set_=update_columns,
-        )
-
-        '''
-        This is a transaction
-        session.begin() does this:
-        BEGIN
-        → execute the upsert
-        → COMMIT if successful
-        → ROLLBACK if an exception occurs
-        '''
-        with self._session_factory() as session:
-            with session.begin():
-                session.execute(statement)
+        if session is not None:
+            execute_batches(session)
+        else:
+            with self._session_factory.begin() as own_session:
+                execute_batches(own_session)

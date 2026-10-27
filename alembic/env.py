@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 from logging.config import fileConfig
-
+import os
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 # Make src/opendatalake importable
@@ -12,6 +12,10 @@ sys.path.append(
 from opendatalake.config.settings import Settings
 from opendatalake.database.models.base import Base
 from opendatalake.database.models.event import Event
+from opendatalake.database.models.dim_date import DimDate
+from opendatalake.database.models.dim_venue import DimVenue
+from opendatalake.database.models.dim_category import DimCategory
+from opendatalake.database.models.fact_events import FactEvent
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -33,12 +37,35 @@ target_metadata = Base.metadata
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
-settings = Settings.load()  # Load settings from environment variables
+# settings = Settings.load()  # Load settings from environment variables
+
+# config.set_main_option(
+#     "sqlalchemy.url",
+#     settings.database_url,
+# )
+settings = Settings.load()
+
+database_url = os.environ.get(
+    "ALEMBIC_DATABASE_URL",
+    settings.database_url,
+)
 
 config.set_main_option(
     "sqlalchemy.url",
-    settings.database_url,
+    database_url,
 )
+
+'''
+Since analytics schema contains views and materialized views that aren't represented as SQLAlchemy tables,
+we should prevent Alembic from accidentally treating those objects as tables to remove. This temporarily prevents
+autogenerate from proposing deletion of existing database tables that aren't registered in SQLAlchemy.
+It doesn't prevent explicit migration operations, and we'll refine the filtering later.
+'''
+def include_object(object, name, type_, reflected, compare_to):
+    if type_ == "table" and reflected and compare_to is None:
+        return False
+
+    return True
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
@@ -58,6 +85,8 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_schemas=True,
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -79,7 +108,10 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            include_schemas=True,
+            include_object=include_object,
         )
 
         with context.begin_transaction():

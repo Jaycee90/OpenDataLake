@@ -12,7 +12,7 @@ Fixtures answer:"What setup does every test need?"
 
 
 import pytest
-from unittest.mock import Mock
+from unittest.mock import Mock, MagicMock
 
 from opendatalake.recipes.events import EventsRecipe
 
@@ -23,4 +23,5 @@ def recipe():
         ticketmaster_service=Mock(),
         event_repository=Mock(),
         analytics_repository=Mock(),
+        session_factory=MagicMock()
     )

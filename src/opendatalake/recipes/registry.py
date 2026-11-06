@@ -9,6 +9,11 @@ class RecipeRegistry:
     def register(self, recipe: BaseRecipe) -> None:
         # Suppose we call: registry.register(AustinEventsRecipe())
         #Inside register(): recipe refers to the AustinEventsRecipe object. Then: recipe.name is: "austin_events"
+        if recipe.name in self.recipes:
+            raise ValueError(
+                f"Recipe '{recipe.name}' is already registered."
+            )
+
         self.recipes[recipe.name] = recipe
 
     def get_recipe(self, name: str) -> BaseRecipe:

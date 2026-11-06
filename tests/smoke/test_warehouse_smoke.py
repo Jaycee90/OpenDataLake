@@ -25,6 +25,13 @@ Before running hundreds of tests, you want to know:
 - Can it perform a basic operation without crashing?
 If these checks fail, there's little value in continuing to more expensive tests.
 The name comes from hardware testing: turn something on and see whether smoke comes out.
+
+test currently verifies that:
+- Source events exist in PostgreSQL.
+- Date, venue, and category dimensions are populated.
+- Repeated dimension loading doesn't create duplicates.
+- The number of facts matches the number of source events.
+- Repeated fact loading doesn't insert duplicate records.
 '''
 
 def test_warehouse_date_loading():
@@ -115,6 +122,19 @@ def test_warehouse_date_loading():
 
             # Verify idempotency.
             assert repository.load_facts() == 0
+
+            # Verify incremental fact loading for one existing event.
+            # confirms the repository accepts a specific event ID and
+            # can process an existing fact without inserting a duplicate.
+            event_id = session.scalar(
+                select(Event.event_id).limit(1)
+            )
+
+            assert event_id is not None
+
+            assert repository.load_facts(
+                event_ids=[event_id]
+            ) == 0
 
             print(f"New facts inserted: {inserted}")
             print(f"Total warehouse facts: {fact_count}")

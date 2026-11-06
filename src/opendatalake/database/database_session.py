@@ -5,8 +5,13 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from opendatalake.config.settings import Settings
 from opendatalake.database.models.base import Base
+
 # Import models so SQLAlchemy registers them.
 from opendatalake.database.models.event import Event
+from opendatalake.database.models.dim_date import DimDate
+from opendatalake.database.models.dim_venue import DimVenue
+from opendatalake.database.models.dim_category import DimCategory
+from opendatalake.database.models.fact_events import FactEvent
 
 logger = logging.getLogger(__name__)
 

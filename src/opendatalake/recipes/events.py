@@ -1,6 +1,8 @@
 import logging
+import re
 from typing import Any
-from datetime import date, time
+from datetime import datetime, timezone, date, time, timedelta
+from opendatalake.utils.date_windows import split_date_window
 from sqlalchemy.orm import Session, sessionmaker
 from opendatalake.recipes.base import BaseRecipe
 from opendatalake.database.models.event import Event
@@ -9,22 +11,17 @@ from opendatalake.services.ticketmaster_service import TicketmasterService
 from opendatalake.exceptions.ticketmaster_error import TicketmasterError
 from opendatalake.repositories.analytics_repo import AnalyticsRepository
 from opendatalake.database.repositories.warehouse_repository import WarehouseRepository
+from opendatalake.config.us_cities import US_CITIES
 
 logger = logging.getLogger(__name__)
 
 class EventsRecipe(BaseRecipe):
     name = "US_events"
 
-    CITIES = [
-        "Austin",
-        "New York",
-        "Los Angeles",
-        "Chicago",
-        "Las Vegas",
-        "Miami",
-        "Nashville",
-        "Seattle",
-    ]
+    CITIES = US_CITIES
+
+    PAGE_SIZE = 50
+    MAX_PAGES = 20
 
     def __init__(self, ticketmaster_service: TicketmasterService, event_repository: EventRepository, analytics_repository: AnalyticsRepository, session_factory: sessionmaker[Session]) -> None:
         self._ticketmaster_service = ticketmaster_service
@@ -32,50 +29,154 @@ class EventsRecipe(BaseRecipe):
         self._analytics_repository = analytics_repository
         self._session_factory = session_factory
 
-    # def extract(self) -> list[dict[str, Any]]:
-    #     logger.info("Extracting events for major US cities...")
+    @staticmethod
+    def _deduplicate_events(
+        events: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Remove duplicate events while preserving their original order."""
 
-    #     all_events: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        unique_events: list[dict[str, Any]] = []
 
-    #     for city in self.CITIES:
-    #         try:
-    #             events = self._ticketmaster_service.get_events(city=city, size=20)
-    #         except TicketmasterError:
-    #             logger.error("Skipping %s due to Ticketmaster API error.", city)
-    #             continue
+        for event in events:
+            event_id = event.get("id")
 
-    #         for event in events:
-    #             event["requested_city"] = city  # Add the city to each event
-    #         all_events.extend(events)
+            if event_id is None:
+                unique_events.append(event)
+                continue
 
-    #         logger.info("Received %d events for %s.", len(events), city)
-    #     logger.info("Total events extracted: %d", len(all_events))
+            if event_id in seen_ids:
+                continue
 
-    #     return all_events
+            seen_ids.add(event_id)
+            unique_events.append(event)
+
+        return unique_events
+
+    def _extract_window(
+        self,
+        city: str,
+        state: str,
+        start: datetime,
+        end: datetime,
+    ) -> list[dict[str, Any]]:
+        """Extract events within a date window, splitting oversized windows."""
+
+        if (
+            start.tzinfo is None
+            or end.tzinfo is None
+            or start.utcoffset() != timedelta(0)
+            or end.utcoffset() != timedelta(0)
+        ):
+            raise ValueError("Extraction windows must use UTC timestamps")
+
+        if start.microsecond != 0 or end.microsecond != 0:
+            raise ValueError("Extraction windows must use whole-second timestamps")
+
+        if start >= end:
+            raise ValueError("Extraction window start must be before end")
+
+        api_start = start.strftime("%Y-%m-%dT%H:%M:%SZ")
+        api_end = (end - timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        response = self._ticketmaster_service.get_event_page(
+            city=city,
+            state=state,
+            start_date_time=api_start,
+            end_date_time=api_end,
+            size=self.PAGE_SIZE,
+            page=0,
+        )
+
+        page_info = response.get("page", {})
+        total_pages = page_info.get("totalPages", 0)
+
+        if total_pages > self.MAX_PAGES:
+            logger.info(
+                "Splitting %s, %s window %s to %s (%d pages)",
+                city,
+                state,
+                start,
+                end,
+                total_pages,
+            )
+
+            first, second = split_date_window(start, end)
+
+            return (
+                self._extract_window(city, state, *first)
+                + self._extract_window(city, state, *second)
+            )
+
+        events = response.get("_embedded", {}).get("events", [])
+
+        for page in range(1, total_pages):
+            next_response = self._ticketmaster_service.get_event_page(
+                city=city,
+                state=state,
+                start_date_time=api_start,
+                end_date_time=api_end,
+                size=self.PAGE_SIZE,
+                page=page,
+            )
+
+            page_events = next_response.get("_embedded", {}).get("events", [])
+            events.extend(page_events)
+
+        logger.info(
+            "Extracted %d events for %s, %s between %s and %s",
+            len(events),
+            city,
+            state,
+            start,
+            end,
+        )
+
+        return events
 
     # Switching to a paginated approach for extracting events from Ticketmaster API (end of test)
-    def extract(self) -> list[dict[str, Any]]:
-        logger.info("Extracting events for major US cities...")
+    def extract(self, days_ahead: int=365) -> list[dict[str, Any]]:
+        if days_ahead < 1 or days_ahead > 365:
+            raise ValueError("days_ahead must be between 1 and 365")
+        logger.info("Extracting events for major US cities over the next %d days...", days_ahead)
+
+        start = datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+
+        end = start + timedelta(days=days_ahead)
 
         all_events: list[dict[str, Any]] = []
 
-        for city in self.CITIES:
-            page = 0
-            while True:
-                try:
-                    events = self._ticketmaster_service.get_events(city=city, size=50, page=page)
-                    if not events:  # Break if no more events are returned
-                        break
-                except TicketmasterError:
-                    logger.error("Skipping %s due to Ticketmaster API error.", city)
-                    break
+        for index, (city, state) in enumerate(self.CITIES, start=1):
+            logger.info(
+                "[%d/%d] Starting %s, %s",
+                index, len(self.CITIES), city, state
+            )
 
-                for event in events:
-                    event["requested_city"] = city  # Add the city to each event
-                all_events.extend(events)
+            print(f"[{index}/50] Starting {city}, {state}", flush=True)
 
-                logger.info("Received %d events for %s on page %d.", len(events), city, page)
-                page += 1  # Increment the page number for the next request
+            events = self._extract_window(
+                city=city,
+                state=state,
+                start=start,
+                end=end,
+            )
+
+            for event in events:
+                event["requested_city"] = city  # Add the city to each event
+                event["requested_state"] = state  # Add the state to each event
+            all_events.extend(events)
+
+            print(f"[{index}/50] Finished {city}: {len(events)} events", flush=True)
+
+            logger.info(
+                "[%d/%d] Finished %s, %s: %d events | Running total: %d",
+                index, len(self.CITIES), city, state,
+                len(events), len(all_events)
+            )
+
+        all_events = self._deduplicate_events(all_events)
 
         logger.info("Total events extracted: %d", len(all_events))
 
@@ -105,6 +206,27 @@ class EventsRecipe(BaseRecipe):
 
             city = city.strip() if city else None
             state = state.strip() if state else None
+
+            requested_city = raw_event.get("requested_city")
+            requested_state = raw_event.get("requested_state")
+
+            if (
+                not requested_city
+                or not requested_state
+                or not city
+                or not state
+                or re.sub(r"[^\w\s]", "", city).casefold() != re.sub(r"[^\w\s]", "", requested_city).casefold()
+                or state.upper() != requested_state.strip().upper()
+            ):
+                logger.warning(
+                    "Skipping event %s: requested=%s (%s), actual=%s (%s)",
+                    raw_event.get("id"),
+                    requested_city,
+                    requested_state,
+                    city,
+                    state,
+                )
+                continue
 
             event_modal = Event(
                 event_id=raw_event.get("id"),
@@ -177,10 +299,11 @@ class EventsRecipe(BaseRecipe):
             # Step 2: Load warehouse dimensions and facts.
             warehouse = WarehouseRepository(session)
 
-            dates = warehouse.load_dates()
-            venues = warehouse.load_venues()
-            categories = warehouse.load_categories()
-            facts = warehouse.load_facts()
+            event_ids = [event.event_id for event in transformed_data]
+            dates = warehouse.load_dates(event_ids=event_ids)
+            venues = warehouse.load_venues(event_ids=event_ids)
+            categories = warehouse.load_categories(event_ids=event_ids)
+            facts = warehouse.load_facts(event_ids=event_ids)
 
             logger.info(
                 "Warehouse loaded: %d dates, %d venues, "

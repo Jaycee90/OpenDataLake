@@ -1,6 +1,6 @@
 from sqlalchemy import select, tuple_
 from sqlalchemy.orm import Session
-
+import logging
 from opendatalake.database.models.event import Event
 from opendatalake.database.models.dim_date import DimDate
 from opendatalake.database.models.dim_venue import DimVenue
@@ -8,15 +8,28 @@ from opendatalake.database.models.dim_category import DimCategory
 from opendatalake.database.models.fact_events import FactEvent
 
 
+logger = logging.getLogger(__name__)
+
 class WarehouseRepository:
+
     def __init__(self, session: Session):
         self.session = session
 
-    def load_dates(self) -> int:
+    def load_dates(self, event_ids: list[str] | None = None) -> int:
+        query = select(Event.event_date).where(
+            Event.event_date.is_not(None)
+        )
+
+        if event_ids is not None:
+            if not event_ids:
+                return 0
+
+            query = query.where(
+                Event.event_id.in_(event_ids)
+            )
+
         event_dates = self.session.scalars(
-            select(Event.event_date)
-            .where(Event.event_date.is_not(None))
-            .distinct()
+            query.distinct()
         ).all()
 
         inserted = 0
@@ -50,8 +63,8 @@ class WarehouseRepository:
     session.add() prepares a new venue record.
     session.flush() sends inserts to PostgreSQL without committing the transaction.
     '''
-    def load_venues(self) -> int:
-        venues = self.session.execute(
+    def load_venues(self, event_ids: list[str] | None = None) -> int:
+        query = (
             select(
                 Event.venue,
                 Event.city,
@@ -62,9 +75,20 @@ class WarehouseRepository:
             )
             .where(
                 Event.venue.is_not(None),
-                Event.city.is_not(None)
+                Event.city.is_not(None),
             )
-            .order_by(Event.id)
+        )
+
+        if event_ids is not None:
+            if not event_ids:
+                return 0
+
+            query = query.where(
+                Event.event_id.in_(event_ids)
+            )
+
+        venues = self.session.execute(
+            query.order_by(Event.id)
         ).all()
 
         inserted = 0
@@ -107,13 +131,23 @@ class WarehouseRepository:
         self.session.flush()
         return inserted
 
-    def load_categories(self) -> int:
+    def load_categories(self, event_ids: list[str] | None = None) -> int:
+        query = select(
+            Event.category,
+            Event.genre,
+            Event.subgenre,
+        )
+
+        if event_ids is not None:
+            if not event_ids:
+                return 0
+
+            query = query.where(
+                Event.event_id.in_(event_ids)
+            )
+
         categories = self.session.execute(
-            select(
-                Event.category,
-                Event.genre,
-                Event.subgenre,
-            ).distinct()
+            query.distinct()
         ).all()
 
         inserted = 0
@@ -145,21 +179,25 @@ class WarehouseRepository:
 
         return inserted
 
-    def load_facts(self) -> int:
-        events = self.session.scalars(select(Event)).all()
+    def load_facts(self, event_ids: list[str] | None = None) -> int:
+        query = select(Event)
+
+        if event_ids is not None:
+            if not event_ids:
+                return 0
+            query = query.where(Event.event_id.in_(event_ids))
+
+        events = self.session.scalars(query).all()
+
         inserted = 0
 
         for event in events:
-            # Prevent duplicate fact records.
-            existing = self.session.scalar(
-                select(FactEvent).where(
-                    FactEvent.event_id == event.event_id
+            if event.event_date is None:
+                logger.warning(
+                    "Skipping warehouse fact for event %s: missing date",
+                    event.event_id,
                 )
-            )
-
-            if existing is not None:
                 continue
-
             date_key = int(event.event_date.strftime("%Y%m%d"))
 
             venue_key = self.session.scalar(
@@ -182,6 +220,20 @@ class WarehouseRepository:
                 raise ValueError(
                     f"Missing warehouse dimension for event {event.event_id}"
                 )
+
+            existing = self.session.scalar(
+                select(FactEvent).where(
+                    FactEvent.event_id == event.event_id
+                )
+            )
+
+            if existing is not None:
+                existing.date_key = date_key
+                existing.venue_key = venue_key
+                existing.category_key = category_key
+                existing.event_name = event.name
+                existing.status = event.status
+                continue
 
             self.session.add(
                 FactEvent(

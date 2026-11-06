@@ -15,6 +15,7 @@ class Runner:
             recipe.run()
 
         logger.info("OpenDataLake execution completed.")
+
     def run_recipe(self, recipe_name: str) -> None:
         logger.info(f"Starting recipe: {recipe_name}")
 

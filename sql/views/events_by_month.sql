@@ -3,7 +3,8 @@ SELECT
     d.year,
     d.month,
     d.month_name,
-    COUNT(*) AS total_events
+    COUNT(*) AS total_events,
+    MAKE_DATE(d.year, d.month, 1) AS event_month
 FROM analytics.fact_events AS f
 JOIN analytics.dim_date AS d
     ON f.date_key = d.date_key

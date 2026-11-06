@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
 from opendatalake.database.models.event import Event
+from sqlalchemy import or_
 
 class EventRepository:
 
@@ -59,6 +60,15 @@ class EventRepository:
                 statement = statement.on_conflict_do_update(
                     index_elements=[Event.event_id],
                     set_=update_columns,
+                    where=or_(
+                        *[
+                            getattr(Event, column).is_distinct_from(
+                                getattr(statement.excluded, column)
+                            )
+                            for column in update_columns
+                            if column != "updated_at"
+                        ]
+                    ),
                 )
 
                 db_session.execute(statement)

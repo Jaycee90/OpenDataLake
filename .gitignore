@@ -8,6 +8,7 @@ __pycache__/
 # Secrets and local environment variables
 .env
 .env.*
+.env.superset
 
 # macOS
 .DS_Store

@@ -229,6 +229,44 @@ class WarehouseRepository:
         else:
             events = self.session.scalars(query).all()
 
+        # Load venue dimension keys once to avoid querying for every event.
+        venue_rows = self.session.execute(
+            select(
+                DimVenue.venue_name,
+                DimVenue.city,
+                DimVenue.state,
+                DimVenue.venue_key,
+            )
+        ).all()
+
+        venue_lookup = {
+            (row.venue_name, row.city, row.state): row.venue_key
+            for row in venue_rows
+        }
+
+        # Load category dimension keys once to avoid querying for every event.
+        category_rows = self.session.execute(
+            select(
+                DimCategory.category,
+                DimCategory.genre,
+                DimCategory.subgenre,
+                DimCategory.category_key,
+            )
+        ).all()
+
+        category_lookup = {
+            (row.category, row.genre, row.subgenre): row.category_key
+            for row in category_rows
+        }
+
+        # Load existing fact records once to avoid querying per event.
+        existing_facts = {
+            fact.event_id: fact
+            for fact in self.session.scalars(
+                select(FactEvent)
+            ).all()
+        }
+        
         inserted = 0
 
         for event in events:
@@ -240,20 +278,14 @@ class WarehouseRepository:
                 continue
             date_key = int(event.event_date.strftime("%Y%m%d"))
 
-            venue_key = self.session.scalar(
-                select(DimVenue.venue_key).where(
-                    DimVenue.venue_name == event.venue,
-                    DimVenue.city == event.city,
-                    DimVenue.state == event.state,
-                )
+            # Look up the venue key in memory instead of querying PostgreSQL.
+            venue_key = venue_lookup.get(
+                (event.venue, event.city, event.state)
             )
 
-            category_key = self.session.scalar(
-                select(DimCategory.category_key).where(
-                    DimCategory.category == event.category,
-                    DimCategory.genre == event.genre,
-                    DimCategory.subgenre == event.subgenre,
-                )
+            # Look up the category key in memory.
+            category_key = category_lookup.get(
+                (event.category, event.genre, event.subgenre)
             )
 
             if venue_key is None or category_key is None:
@@ -261,11 +293,8 @@ class WarehouseRepository:
                     f"Missing warehouse dimension for event {event.event_id}"
                 )
 
-            existing = self.session.scalar(
-                select(FactEvent).where(
-                    FactEvent.event_id == event.event_id
-                )
-            )
+            # Find the existing fact record in memory instead of querying PostgreSQL.
+            existing = existing_facts.get(event.event_id)
 
             if existing is not None:
                 existing.date_key = date_key

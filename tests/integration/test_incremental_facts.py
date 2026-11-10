@@ -217,3 +217,87 @@ def test_load_categories_filters_event_ids():
 
     finally:
         engine.dispose()
+
+# This test ensures that the optimized load_facts() method does not execute a separate SELECT query for each event,
+#  which would lead to an N+1 query problem. Instead, it should use a small, fixed number of SELECT queries
+#  regardless of the number of events being loaded.
+'''
+load_facts() should execute approximately four SELECT queries:
+Query	Purpose
+1	Retrieve source events
+2	Retrieve venue dimensions
+3	Retrieve category dimensions
+4	Retrieve existing facts'''
+
+def test_load_facts_avoids_n_plus_one_queries():
+    from sqlalchemy import event as sqlalchemy_event
+    from sqlalchemy.orm import Session
+
+    engine = create_database_engine(Settings.load())
+
+    try:
+        assert engine.url.database == "opendatalake_test"
+
+        with engine.connect() as connection:
+            transaction = connection.begin()
+
+            try:
+                with Session(bind=connection, autoflush=False) as session:
+                    # Create multiple events with unique IDs.
+                    event_ids = [
+                        f"bulk-test-{i}"
+                        for i in range(20)
+                    ]
+
+                    session.add_all([
+                        create_event(event_id=event_id)
+                        for event_id in event_ids
+                    ])
+                    session.flush()
+
+                    warehouse = WarehouseRepository(session)
+
+                    # Prepare required warehouse dimensions.
+                    warehouse.load_dates(event_ids=event_ids)
+                    warehouse.load_venues(event_ids=event_ids)
+                    warehouse.load_categories(event_ids=event_ids)
+
+                    select_count = 0
+
+                    def count_selects(
+                        conn, cursor, statement,
+                        parameters, context, executemany
+                    ):
+                        nonlocal select_count
+
+                        if statement.lstrip().upper().startswith("SELECT"):
+                            select_count += 1
+
+                    # Count only queries executed by load_facts().
+                    sqlalchemy_event.listen(
+                        engine, "before_cursor_execute", count_selects
+                    )
+
+                    try:
+                        inserted = warehouse.load_facts(
+                            event_ids=event_ids
+                        )
+                    finally:
+                        sqlalchemy_event.remove(
+                            engine, "before_cursor_execute", count_selects
+                        )
+
+                    assert inserted == 20
+
+                    # The optimized method should use a small,
+                    # fixed number of SELECT queries.
+                    assert select_count <= 5, (
+                        f"Expected at most 5 SELECT queries, "
+                        f"but executed {select_count}"
+                    )
+
+            finally:
+                transaction.rollback()
+
+    finally:
+        engine.dispose()

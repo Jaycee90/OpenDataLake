@@ -1,0 +1,11 @@
+# Docker uses this file to exclude local virtual environments,
+# secrets, caches, and Git history from its build context.
+.venv/
+.env
+.env.*
+.git/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+superset_home/

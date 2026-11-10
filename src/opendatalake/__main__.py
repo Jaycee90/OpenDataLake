@@ -1,3 +1,5 @@
+# __main__.py Handles dependency injection
+
 import argparse
 from sqlalchemy import text
 

@@ -15,8 +15,8 @@ from opendatalake.database.models.dim_category import DimCategory
 
 The outer transaction rolls back the inserted data, including the dimensions and fact record.
 
-Important: This test must run only against opendatalake_test. The database-name assertion 
-provides an additional safeguard, but the test still needs to connect before checking it.'''
+Important: This test must run only against opendatalake_test. The database-name assertion provides
+an additional safeguard, but the test still needs to connect before checking it.'''
 
 def test_load_facts_filters_event_ids():
     engine = create_database_engine(Settings.load())

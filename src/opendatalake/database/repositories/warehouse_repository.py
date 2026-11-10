@@ -10,6 +10,15 @@ from opendatalake.database.models.fact_events import FactEvent
 
 logger = logging.getLogger(__name__)
 
+# Maximum number of event IDs processed in a single database query.
+BATCH_SIZE = 1000
+
+
+def batch_event_ids(event_ids: list[str]):
+    """Split event IDs into smaller batches to avoid oversized SQL queries."""
+    for start in range(0, len(event_ids), BATCH_SIZE):
+        yield event_ids[start:start + BATCH_SIZE]
+
 class WarehouseRepository:
 
     def __init__(self, session: Session):
@@ -24,13 +33,21 @@ class WarehouseRepository:
             if not event_ids:
                 return 0
 
-            query = query.where(
-                Event.event_id.in_(event_ids)
-            )
+            # Retrieve dates in batches to avoid oversized SQL queries.
+            event_dates = set()
 
-        event_dates = self.session.scalars(
-            query.distinct()
-        ).all()
+            for batch in batch_event_ids(event_ids):
+                batch_query = query.where(
+                    Event.event_id.in_(batch)
+                ).distinct()
+
+                event_dates.update(
+                    self.session.scalars(batch_query).all()
+                )
+        else:
+            event_dates = set(
+                self.session.scalars(query.distinct()).all()
+            )
 
         inserted = 0
 
@@ -83,13 +100,17 @@ class WarehouseRepository:
             if not event_ids:
                 return 0
 
-            query = query.where(
-                Event.event_id.in_(event_ids)
-            )
+            # Retrieve venues in smaller batches.
+            venues = []
 
-        venues = self.session.execute(
-            query.order_by(Event.id)
-        ).all()
+            for batch in batch_event_ids(event_ids):
+                batch_query = query.where(
+                    Event.event_id.in_(batch)
+                )
+
+                venues.extend(self.session.execute(batch_query.order_by(Event.id)).all())
+        else:
+            venues = self.session.execute(query.order_by(Event.id)).all()
 
         inserted = 0
         seen = set()
@@ -142,13 +163,21 @@ class WarehouseRepository:
             if not event_ids:
                 return 0
 
-            query = query.where(
-                Event.event_id.in_(event_ids)
-            )
+            # Retrieve categories in smaller batches.
+            categories = set()
 
-        categories = self.session.execute(
-            query.distinct()
-        ).all()
+            for batch in batch_event_ids(event_ids):
+                batch_query = query.where(
+                    Event.event_id.in_(batch)
+                ).distinct()
+
+                categories.update(
+                    self.session.execute(batch_query).all()
+                )
+        else:
+            categories = set(
+                self.session.execute(query.distinct()).all()
+            )
 
         inserted = 0
 
@@ -185,9 +214,20 @@ class WarehouseRepository:
         if event_ids is not None:
             if not event_ids:
                 return 0
-            query = query.where(Event.event_id.in_(event_ids))
+            
+            # Retrieve events in batches to avoid oversized SQL queries.
+            events = []
 
-        events = self.session.scalars(query).all()
+            for batch in batch_event_ids(event_ids):
+                batch_query = query.where(
+                    Event.event_id.in_(batch)
+                )
+
+                events.extend(
+                    self.session.scalars(batch_query).all()
+                )
+        else:
+            events = self.session.scalars(query).all()
 
         inserted = 0
 

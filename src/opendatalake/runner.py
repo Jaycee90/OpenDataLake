@@ -1,3 +1,5 @@
+# Runner Executes the registered recipes.
+
 import logging
 from opendatalake.recipes.base import BaseRecipe
 from opendatalake.recipes.registry import RecipeRegistry

@@ -52,6 +52,7 @@ jobs:
     env:
       DATABASE_URL: postgresql+psycopg://opendatalake:testpassword@localhost:5432/opendatalake_test
       ALEMBIC_DATABASE_URL: postgresql+psycopg://opendatalake:testpassword@localhost:5432/opendatalake_test
+      TICKETMASTER_API_KEY: ci-test-placeholder
       PYTHONPATH: src
 
     services:

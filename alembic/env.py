@@ -43,12 +43,10 @@ target_metadata = Base.metadata
 #     "sqlalchemy.url",
 #     settings.database_url,
 # )
-settings = Settings.load()
+database_url = os.environ.get("ALEMBIC_DATABASE_URL")
 
-database_url = os.environ.get(
-    "ALEMBIC_DATABASE_URL",
-    settings.database_url,
-)
+if not database_url:
+    database_url = Settings.load().database_url
 
 config.set_main_option(
     "sqlalchemy.url",

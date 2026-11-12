@@ -25,8 +25,8 @@ class Settings:
             raise ValueError("DATABASE_URL is required.")
         
         api_key = os.getenv("TICKETMASTER_API_KEY")
-        http_timeout=float(os.getenv("HTTP_TIMEOUT", 10.0)),
-        http_max_attempts=int(os.getenv("HTTP_MAX_ATTEMPTS", 3)),
+        http_timeout=float(os.getenv("HTTP_TIMEOUT", 10.0))
+        http_max_attempts=int(os.getenv("HTTP_MAX_ATTEMPTS", 3))
         http_delay=float(os.getenv("HTTP_DELAY", 1.0))
 
         if not api_key:

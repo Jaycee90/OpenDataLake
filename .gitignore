@@ -34,3 +34,16 @@ data/processed/*
 # Keep data directories when empty
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+# Terraform local state and providers
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/crash.log
+**/crash.*.log
+**/*.tfvars
+**/*.tfvars.json
+!**/.terraform.lock.hcl
+
+# Database backups
+*.dump
+*.backup

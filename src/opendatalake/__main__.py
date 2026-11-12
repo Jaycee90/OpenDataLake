@@ -2,7 +2,7 @@
 
 import argparse
 from sqlalchemy import text
-
+import os
 from opendatalake.database.database_session import create_database_engine, create_database_tables, create_session_factory
 from opendatalake.config.settings import Settings
 from opendatalake.repositories.event_repo import EventRepository
@@ -11,6 +11,7 @@ from opendatalake.services.http_client import HttpClient
 from opendatalake.services.ticketmaster_service import TicketmasterService
 from opendatalake.recipes.events import EventsRecipe
 from opendatalake.recipes.registry import RecipeRegistry
+from opendatalake.services.s3_storage_service import S3StorageService
 from opendatalake.runner import Runner
 from opendatalake.config.logger import configure_logging
 
@@ -34,6 +35,12 @@ def parse_arguments() -> argparse.Namespace:
         "--recipe",
         type=str,
         help="Run one recipe by name.",
+    )
+
+    parser.add_argument(
+        "--test-mode",
+        action="store_true",
+        help="Run a small ETL batch for testing purposes.",
     )
 
     return parser.parse_args()
@@ -73,7 +80,16 @@ def main() -> None:
     ticketmaster_service = TicketmasterService(http_client=http_client, settings=settings)
     event_repository = EventRepository(session_factory=session_factory)
     analytics_repository = AnalyticsRepository(session_factory=session_factory)
-    events_recipe = EventsRecipe(ticketmaster_service=ticketmaster_service, event_repository=event_repository, analytics_repository=analytics_repository, session_factory=session_factory)
+    s3_storage_service = None
+
+    if os.getenv("ENABLE_S3", "false").lower() == "true":
+        bucket_name = os.environ["S3_BUCKET_NAME"]
+
+        s3_storage_service = S3StorageService(
+            bucket_name=bucket_name,
+            profile_name=os.getenv("AWS_PROFILE", "opendatalake"),
+        )
+    events_recipe = EventsRecipe(ticketmaster_service=ticketmaster_service, event_repository=event_repository, analytics_repository=analytics_repository, session_factory=session_factory, s3_storage_service=s3_storage_service, test_mode=arguments.test_mode)
     registry = RecipeRegistry()
     registry.register(events_recipe) # Registers recipe
 

@@ -11,6 +11,7 @@ from opendatalake.services.ticketmaster_service import TicketmasterService
 from opendatalake.exceptions.ticketmaster_error import TicketmasterError
 from opendatalake.repositories.analytics_repo import AnalyticsRepository
 from opendatalake.database.repositories.warehouse_repository import WarehouseRepository
+from opendatalake.services.s3_storage_service import S3StorageService
 from opendatalake.config.us_cities import US_CITIES
 
 logger = logging.getLogger(__name__)
@@ -23,11 +24,21 @@ class EventsRecipe(BaseRecipe):
     PAGE_SIZE = 50
     MAX_PAGES = 20
 
-    def __init__(self, ticketmaster_service: TicketmasterService, event_repository: EventRepository, analytics_repository: AnalyticsRepository, session_factory: sessionmaker[Session]) -> None:
+    def __init__(
+        self,
+        ticketmaster_service: TicketmasterService,
+        event_repository: EventRepository,
+        analytics_repository: AnalyticsRepository,
+        session_factory: sessionmaker[Session],
+        s3_storage_service: S3StorageService | None = None,
+        test_mode: bool = False,
+    ) -> None:
         self._ticketmaster_service = ticketmaster_service
         self._event_repository = event_repository
         self._analytics_repository = analytics_repository
         self._session_factory = session_factory
+        self._s3_storage_service = s3_storage_service
+        self._test_mode = test_mode
 
     @staticmethod
     def _deduplicate_events(
@@ -89,16 +100,37 @@ class EventsRecipe(BaseRecipe):
         )
 
         page_info = response.get("page", {})
-        total_pages = page_info.get("totalPages", 0)
+
+        total_pages = page_info.get("totalPages")
+        total_elements = page_info.get("totalElements")
+
+        if total_pages is None or total_elements is None:
+            raise ValueError(
+                f"Missing pagination metadata for {city}, {state}"
+            )
+
+        if total_pages < 0 or total_elements < 0:
+            raise ValueError(
+                f"Invalid pagination for {city}, {state}: "
+                f"totalPages={total_pages}, totalElements={total_elements}"
+            )
+
+        if total_pages == 0 and total_elements != 0:
+            raise ValueError(
+                f"Inconsistent pagination for {city}, {state}: "
+                f"totalPages=0, totalElements={total_elements}"
+            )
+
+        if total_pages > 0 and total_elements == 0:
+            raise ValueError(
+                f"Inconsistent pagination for {city}, {state}: "
+                f"totalPages={total_pages}, totalElements=0"
+            )
 
         if total_pages > self.MAX_PAGES:
             logger.info(
                 "Splitting %s, %s window %s to %s (%d pages)",
-                city,
-                state,
-                start,
-                end,
-                total_pages,
+                city, state, start, end, total_pages,
             )
 
             first, second = split_date_window(start, end)
@@ -132,6 +164,13 @@ class EventsRecipe(BaseRecipe):
             end,
         )
 
+        if len(events) != total_elements:
+            raise ValueError(
+                f"Incomplete extraction for {city}, {state}: "
+                f"expected {total_elements} events, "
+                f"received {len(events)}"
+            )
+
         return events
 
     # Switching to a paginated approach for extracting events from Ticketmaster API (end of test)
@@ -146,6 +185,21 @@ class EventsRecipe(BaseRecipe):
 
         end = start + timedelta(days=days_ahead)
 
+        if self._test_mode:
+            logger.info("Test mode enabled: fetching 5 Austin events.")
+
+            events = self._ticketmaster_service.get_events(
+                city="Austin",
+                state="TX",
+                size=5,
+            )
+
+            for event in events:
+                event["requested_city"] = "Austin"
+                event["requested_state"] = "TX"
+
+            return events
+
         all_events: list[dict[str, Any]] = []
 
         for index, (city, state) in enumerate(self.CITIES, start=1):
@@ -154,7 +208,7 @@ class EventsRecipe(BaseRecipe):
                 index, len(self.CITIES), city, state
             )
 
-            print(f"[{index}/50] Starting {city}, {state}", flush=True)
+            print(f"[{index}/{len(self.CITIES)}] Starting {city}, {state}", flush=True)
 
             events = self._extract_window(
                 city=city,
@@ -181,6 +235,21 @@ class EventsRecipe(BaseRecipe):
         logger.info("Total events extracted: %d", len(all_events))
 
         return all_events
+
+    def save_raw(self, raw_data: list[dict[str, Any]]) -> None:
+        """Save raw Ticketmaster events to S3 when storage is enabled."""
+
+        if self._s3_storage_service is None:
+            logger.info("S3 raw-data storage disabled; skipping upload.")
+            return
+
+        if not raw_data:
+            logger.info("No raw events to upload.")
+            return
+
+        object_key = self._s3_storage_service.upload_raw_events(raw_data)
+
+        logger.info("Raw events saved to S3: %s", object_key)
 
     def transform(self, raw_data: list[dict]) -> list[Event]:
         logger.info("Transforming %d events...", len(raw_data))
@@ -285,28 +354,48 @@ class EventsRecipe(BaseRecipe):
             seen_event_ids.add(event.event_id)
 
     def load(self, transformed_data: list[Event]) -> None:
-        logger.info("Loading %d US events...", len(transformed_data))
+        if self._test_mode:
+            raise RuntimeError(
+                "Full refresh is disabled in test mode to protect existing data."
+            )
+
+        if not transformed_data:
+            raise ValueError(
+                "Cannot perform a full refresh with an empty dataset."
+            )
+
+        logger.info(
+            "Starting full refresh with %d events...",
+            len(transformed_data),
+        )
 
         with self._session_factory.begin() as session:
-            # Step 1: Load source events.
+            warehouse = WarehouseRepository(session)
+
+            # Step 1: Clear the previous warehouse snapshot.
+            warehouse.clear_warehouse()
+
+            # Step 2: Clear the previous source events.
+            self._event_repository.clear_all(session)
+
+            # Step 3: Insert the new source events.
             self._event_repository.upsert_all(
                 transformed_data,
                 session=session,
             )
 
-            logger.info("Loaded %d events", len(transformed_data))
+            logger.info("Loaded %d source events.", len(transformed_data))
 
-            # Step 2: Load warehouse dimensions and facts.
-            warehouse = WarehouseRepository(session)
-
+            # Step 4: Rebuild warehouse dimensions and facts.
             event_ids = [event.event_id for event in transformed_data]
+
             dates = warehouse.load_dates(event_ids=event_ids)
             venues = warehouse.load_venues(event_ids=event_ids)
             categories = warehouse.load_categories(event_ids=event_ids)
             facts = warehouse.load_facts(event_ids=event_ids)
 
             logger.info(
-                "Warehouse loaded: %d dates, %d venues, "
+                "Warehouse rebuilt: %d dates, %d venues, "
                 "%d categories, %d facts",
                 dates,
                 venues,
@@ -314,7 +403,7 @@ class EventsRecipe(BaseRecipe):
                 facts,
             )
 
-            # Step 3: Refresh analytics materialized views.
+            # Step 5: Refresh analytics materialized views.
             self._analytics_repository.refresh_all(session=session)
 
-            logger.info("Refreshed all analytics materialized views.")
+            logger.info("Full refresh completed successfully.")

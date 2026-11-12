@@ -207,9 +207,9 @@ def test_extract_combines_events_from_all_cities(recipe):
     result = recipe.extract()
 
     assert result == [
-        {"id": "austin-1", "requested_city": "Austin", "requested_state": "TX"},
-        {"id": "new-york-1", "requested_city": "New York", "requested_state": "NY"},
-        {"id": "seattle-1", "requested_city": "Seattle", "requested_state": "WA"},
+    {"id": "new-york-1", "requested_city": "New York", "requested_state": "NY"},
+    {"id": "austin-1", "requested_city": "Austin", "requested_state": "TX"},
+    {"id": "seattle-1", "requested_city": "Seattle", "requested_state": "WA"},
     ]
 
 def test_extract_raises_when_ticketmaster_error_occurs(recipe):
@@ -302,15 +302,15 @@ def test_extract_window_fetches_all_pages(recipe):
     recipe._ticketmaster_service.get_event_page = Mock(
         side_effect=[
             {
-                "page": {"totalPages": 3},
+                "page": {"totalPages": 3, "totalElements": 3},
                 "_embedded": {"events": [{"id": "event-1"}]},
             },
             {
-                "page": {"totalPages": 3},
+                "page": {"totalPages": 3, "totalElements": 3},
                 "_embedded": {"events": [{"id": "event-2"}]},
             },
             {
-                "page": {"totalPages": 3},
+                "page": {"totalPages": 3, "totalElements": 3},
                 "_embedded": {"events": [{"id": "event-3"}]},
             },
         ]
@@ -349,15 +349,18 @@ def test_extract_window_splits_when_page_limit_exceeded(recipe):
     recipe._ticketmaster_service.get_event_page = Mock(
         side_effect=[
             {
-                "page": {"totalPages": 74},
+                # Parent window: too many pages, so split
+                "page": {"totalPages": 74, "totalElements": 3700},
                 "_embedded": {"events": [{"id": "ignored-parent"}]},
             },
             {
-                "page": {"totalPages": 1},
+                # First half: one event
+                "page": {"totalPages": 1, "totalElements": 1},
                 "_embedded": {"events": [{"id": "event-first-half"}]},
             },
             {
-                "page": {"totalPages": 1},
+                # Second half: one event
+                "page": {"totalPages": 1, "totalElements": 1},
                 "_embedded": {"events": [{"id": "event-second-half"}]},
             },
         ]

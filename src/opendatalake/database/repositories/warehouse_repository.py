@@ -6,6 +6,7 @@ from opendatalake.database.models.dim_date import DimDate
 from opendatalake.database.models.dim_venue import DimVenue
 from opendatalake.database.models.dim_category import DimCategory
 from opendatalake.database.models.fact_events import FactEvent
+from sqlalchemy import delete
 
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,26 @@ class WarehouseRepository:
 
     def __init__(self, session: Session):
         self.session = session
+
+    def clear_warehouse(self) -> None:
+        """
+        Clear warehouse tables before a full ETL refresh.
+
+        Must be called inside the same transaction used
+        to load the new snapshot.
+        """
+
+        # Delete facts first because they reference dimensions.
+        self.session.execute(delete(FactEvent))
+
+        # Then delete dimensions.
+        self.session.execute(delete(DimVenue))
+        self.session.execute(delete(DimCategory))
+        self.session.execute(delete(DimDate))
+
+        self.session.flush()
+
+        logger.info("Existing warehouse data cleared.")
 
     def load_dates(self, event_ids: list[str] | None = None) -> int:
         query = select(Event.event_date).where(

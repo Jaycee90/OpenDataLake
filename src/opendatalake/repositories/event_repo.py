@@ -4,18 +4,36 @@ for Event objects. It uses SQLAlchemy sessions to communicate with
 the database while hiding database details from the rest of the
 application.
 '''
+import logging
+
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
 from opendatalake.database.models.event import Event
-from sqlalchemy import or_
+from sqlalchemy import or_, delete
+
+logger = logging.getLogger(__name__)
 
 class EventRepository:
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         # _session_factory tells other developers that this is an internal dependency. Don't access it outside this class."
         self._session_factory = session_factory
+
+    def clear_all(self, session: Session) -> None:
+        """
+        Delete all existing source events.
+
+        The caller must manage the transaction so that
+        deleting and reloading happen atomically.
+        """
+        result = session.execute(delete(Event))
+
+        logger.info(
+            "Deleted %d existing source events.",
+            result.rowcount,
+        )
 
     def upsert_all(self, events: list[Event], session: Session | None = None,) -> None:
         if not events:

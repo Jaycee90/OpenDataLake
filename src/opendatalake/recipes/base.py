@@ -8,12 +8,18 @@ logger = logging.getLogger(__name__)
 class BaseRecipe(ABC):
     name: str = "base"
 
+    # we don't want every recipe to require S3. We'll make raw-data storage an optional hook.
+    def save_raw(self, raw_data) -> None:
+        """Optional hook for persisting raw extracted data."""
+        pass
+
     def run(self) -> None:
         logger.info("Starting recipe: %s", self.name)
         start_time = perf_counter()
 
         try:
             raw_data = self.extract()
+            self.save_raw(raw_data)
             transformed_data = self.transform(raw_data)
             self.validate(transformed_data)
             self.load(transformed_data)

@@ -222,7 +222,7 @@ class EventsRecipe(BaseRecipe):
                 event["requested_state"] = state  # Add the state to each event
             all_events.extend(events)
 
-            print(f"[{index}/50] Finished {city}: {len(events)} events", flush=True)
+            print(f"[{index}/{len(self.CITIES)}] Finished {city}: {len(events)} events", flush=True)
 
             logger.info(
                 "[%d/%d] Finished %s, %s: %d events | Running total: %d",

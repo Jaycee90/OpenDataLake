@@ -1,3 +1,4 @@
+# This keeps unnecessary infrastructure files and backups out of Docker's build context.
 # Docker uses this file to exclude local virtual environments,
 # secrets, caches, and Git history from its build context.
 .venv/
@@ -9,3 +10,17 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 superset_home/
+# Terraform
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfvars
+**/*.tfvars.json
+
+# Database backups
+*.dump
+*.backup
+
+# Local AWS credentials
+.aws/
+**/.aws/

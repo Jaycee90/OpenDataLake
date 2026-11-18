@@ -193,10 +193,15 @@ def test_extract_gets_events_for_all_cities(recipe):
 
 # Test that events are combined
 def test_extract_combines_events_from_all_cities(recipe):
+    recipe.CITIES = [
+    ("New York", "NY"),
+    ("Austin", "TX"),
+    ("Las Vegas", "NV")
+    ]
     responses = {
-        "Austin": [{"id": "austin-1"}],
         "New York": [{"id": "new-york-1"}],
-        "Seattle": [{"id": "seattle-1"}],
+        "Austin": [{"id": "austin-1"}],
+        "Las Vegas": [{"id": "las-vegas-1"}],
     }
 
     def fake_extract_window(city, state, start, end):
@@ -209,7 +214,7 @@ def test_extract_combines_events_from_all_cities(recipe):
     assert result == [
     {"id": "new-york-1", "requested_city": "New York", "requested_state": "NY"},
     {"id": "austin-1", "requested_city": "Austin", "requested_state": "TX"},
-    {"id": "seattle-1", "requested_city": "Seattle", "requested_state": "WA"},
+    {"id": "las-vegas-1", "requested_city": "Las Vegas", "requested_state": "NV"},
     ]
 
 def test_extract_raises_when_ticketmaster_error_occurs(recipe):

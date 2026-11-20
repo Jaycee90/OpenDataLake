@@ -10,14 +10,19 @@ logger = logging.getLogger(__name__)
 
 
 class S3StorageService:
-    def __init__(self, bucket_name: str, profile_name: str = "opendatalake"):
+    # Make S3 authentication work locally and on ECS
+    # For local development, continue using your existing AWS_PROFILE=opendatalake setting.
+    # For ECS, we'll leave AWS_PROFILE unset.
+    def __init__(self, bucket_name: str, profile_name: str | None = None):
         self.bucket_name = bucket_name
 
-        # boto3.Session authenticates using your existing AWS CLI profile.
+        # Local: use the AWS profile when provided.
+        # ECS: automatically use credentials from the IAM task role.
         session = boto3.Session(
             profile_name=profile_name,
             region_name="us-east-1",
         )
+
         self.s3_client = session.client("s3")
 
     def upload_raw_events(self, events: list[dict[str, Any]]) -> str:

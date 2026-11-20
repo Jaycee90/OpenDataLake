@@ -1,3 +1,4 @@
+## STEP 1: Configure Terraform and AWS Provider ##
 # terraform — Defines Terraform's version and required plugins.
 terraform {
   required_version = ">= 1.5.0"

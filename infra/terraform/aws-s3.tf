@@ -1,3 +1,4 @@
+## STEP 2: Create an S3 Bucket ##
 # resource defines an AWS resource Terraform will manage.
 resource "aws_s3_bucket" "raw_events" {
   bucket_prefix = "opendatalake-raw-"

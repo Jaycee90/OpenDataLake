@@ -1,3 +1,4 @@
+##  STEP 3: Configure GitHub OIDC for AWS ##
 # This configuration creates three AWS resources:
 # 1. An IAM OIDC identity provider for GitHub.
 # 2. An IAM role that trusts only workflow runs from Jaycee90/OpenDataLake on main.

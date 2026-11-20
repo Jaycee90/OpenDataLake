@@ -44,6 +44,15 @@ resource "aws_ecs_task_definition" "etl" {
         }
       ]
 
+      # Inject the Ticketmaster API key securely from AWS Secrets Manager.
+      # ECS retrieves this secret using the execution role.
+      secrets = [
+        {
+          name      = "TICKETMASTER_API_KEY"
+          valueFrom = aws_secretsmanager_secret.ticketmaster_api_key.arn
+        }
+      ]
+
       logConfiguration = {
         logDriver = "awslogs"
         options = {

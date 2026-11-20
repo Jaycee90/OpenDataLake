@@ -1,6 +1,6 @@
 import logging
 
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from opendatalake.config.settings import Settings
@@ -36,4 +36,10 @@ def create_session_factory(engine: Engine,) -> sessionmaker[Session]:
     )
 
 def create_database_tables(engine: Engine) -> None:
+    logger.info("Initializing PostgreSQL database schema")
+
+    with engine.begin() as connection:
+        connection.execute(text("CREATE SCHEMA IF NOT EXISTS analytics"))
+
+    logger.info("Creating database tables if they do not exist")
     Base.metadata.create_all(bind=engine)

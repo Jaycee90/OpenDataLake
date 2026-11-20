@@ -1,3 +1,4 @@
+##  STEP 4: Create an ECR Repository ##
 # Private container registry for the OpenDataLake ETL.
 resource "aws_ecr_repository" "opendatalake" {
   name                 = "opendatalake"

@@ -87,7 +87,9 @@ def main() -> None:
 
         s3_storage_service = S3StorageService(
             bucket_name=bucket_name,
-            profile_name=os.getenv("AWS_PROFILE", "opendatalake"),
+            # For local development, continue using your existing AWS_PROFILE=opendatalake setting.
+            # For ECS, we'll leave AWS_PROFILE unset.
+            profile_name=os.getenv("AWS_PROFILE"),
         )
     events_recipe = EventsRecipe(ticketmaster_service=ticketmaster_service, event_repository=event_repository, analytics_repository=analytics_repository, session_factory=session_factory, s3_storage_service=s3_storage_service, test_mode=arguments.test_mode)
     registry = RecipeRegistry()

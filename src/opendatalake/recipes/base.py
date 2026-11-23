@@ -22,6 +22,10 @@ class BaseRecipe(ABC):
             self.save_raw(raw_data)
             transformed_data = self.transform(raw_data)
             self.validate(transformed_data)
+
+            # Release raw Ticketmaster JSON before database loading.
+            del raw_data
+            
             self.load(transformed_data)
 
         except Exception:

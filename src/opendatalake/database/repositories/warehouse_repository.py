@@ -121,17 +121,22 @@ class WarehouseRepository:
             if not event_ids:
                 return 0
 
-            # Retrieve venues in smaller batches.
-            venues = []
+            def iter_venues():
+                for batch in batch_event_ids(event_ids):
+                    batch_query = query.where(
+                        Event.event_id.in_(batch)
+                    )
 
-            for batch in batch_event_ids(event_ids):
-                batch_query = query.where(
-                    Event.event_id.in_(batch)
-                )
+                    for venue in self.session.execute(
+                        batch_query.order_by(Event.id)
+                    ).all():
+                        yield venue
 
-                venues.extend(self.session.execute(batch_query.order_by(Event.id)).all())
+            venues = iter_venues()
         else:
-            venues = self.session.execute(query.order_by(Event.id)).all()
+            venues = self.session.execute(
+                query.order_by(Event.id)
+            ).yield_per(BATCH_SIZE)
 
         inserted = 0
         seen = set()
@@ -235,20 +240,19 @@ class WarehouseRepository:
         if event_ids is not None:
             if not event_ids:
                 return 0
-            
-            # Retrieve events in batches to avoid oversized SQL queries.
-            events = []
 
-            for batch in batch_event_ids(event_ids):
-                batch_query = query.where(
-                    Event.event_id.in_(batch)
-                )
+            def iter_events():
+                for batch in batch_event_ids(event_ids):
+                    batch_query = query.where(
+                        Event.event_id.in_(batch)
+                    )
 
-                events.extend(
-                    self.session.scalars(batch_query).all()
-                )
+                    for event in self.session.scalars(batch_query).all():
+                        yield event
+
+            events = iter_events()
         else:
-            events = self.session.scalars(query).all()
+            events = self.session.scalars(query).yield_per(BATCH_SIZE)
 
         # Load venue dimension keys once to avoid querying for every event.
         venue_rows = self.session.execute(
@@ -281,14 +285,10 @@ class WarehouseRepository:
         }
 
         # Load existing fact records once to avoid querying per event.
-        existing_facts = {
-            fact.event_id: fact
-            for fact in self.session.scalars(
-                select(FactEvent)
-            ).all()
-        }
+        existing_facts = {}
         
         inserted = 0
+        pending_inserts = 0
 
         for event in events:
             if event.event_date is None:
@@ -337,6 +337,13 @@ class WarehouseRepository:
             )
 
             inserted += 1
+            pending_inserts += 1
 
-        self.session.flush()
+            if pending_inserts >= BATCH_SIZE:
+                self.session.flush()
+                pending_inserts = 0
+
+        if pending_inserts > 0:
+            self.session.flush()
+
         return inserted

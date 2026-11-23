@@ -1,8 +1,9 @@
-
 import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
+import os
+import tempfile
 
 import boto3
 
@@ -26,7 +27,7 @@ class S3StorageService:
         self.s3_client = session.client("s3")
 
     def upload_raw_events(self, events: list[dict[str, Any]]) -> str:
-        """Upload raw Ticketmaster events as a JSON object."""
+        """Upload raw Ticketmaster events without serializing all JSON in memory."""
 
         timestamp = datetime.now(timezone.utc).strftime(
             "%Y/%m/%d/%H%M%S-%f"
@@ -34,27 +35,46 @@ class S3StorageService:
 
         object_key = f"raw/ticketmaster/{timestamp}.json"
 
-        # json.dumps() converts the raw event dictionaries into JSON.
-        json_data = json.dumps(events, ensure_ascii=False).encode("utf-8")
+        temp_path = None
 
-        # put_object() uploads the JSON data to S3 with metadata.
-        self.s3_client.put_object(
-            Bucket=self.bucket_name,
-            Key=object_key,
-            Body=json_data,
-            ContentType="application/json",
-            Metadata={
-                "source": "ticketmaster",
-                "pipeline": "opendatalake",
-                "environment": "dev",
-            },
-        )
+        try:
+            # Write JSON incrementally to disk instead of building
+            # one enormous JSON string in memory.
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                suffix=".json",
+                delete=False,
+            ) as temp_file:
+                temp_path = temp_file.name
 
-        logger.info(
-            "Uploaded %d raw events to s3://%s/%s",
-            len(events),
-            self.bucket_name,
-            object_key,
-        )
+                json.dump(events, temp_file, ensure_ascii=False)
 
-        return object_key
+            # boto3 streams the file to S3 rather than requiring
+            # the entire JSON payload in memory.
+            self.s3_client.upload_file(
+                Filename=temp_path,
+                Bucket=self.bucket_name,
+                Key=object_key,
+                ExtraArgs={
+                    "ContentType": "application/json",
+                    "Metadata": {
+                        "source": "ticketmaster",
+                        "pipeline": "opendatalake",
+                        "environment": "dev",
+                    },
+                },
+            )
+
+            logger.info(
+                "Uploaded %d raw events to s3://%s/%s",
+                len(events),
+                self.bucket_name,
+                object_key,
+            )
+
+            return object_key
+
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                os.remove(temp_path)
